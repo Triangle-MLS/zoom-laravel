@@ -6,14 +6,9 @@ use GuzzleHttp\Client;
 class Zoom
 {
     protected string $accessToken;
-    protected $client;
-    protected $account_id;
-    protected $client_id;
-    protected $client_secret;
-
-    public function __construct()
+    protected Client $client;
+    public function __construct(protected $account_id = null, protected $client_id = null, protected $client_secret = null)
     {
-
         if (auth()->check()) {
             $user = auth()->user();
             $this->client_id = method_exists($user, 'clientID') ? $user->clientID() : config('zoom.client_id');
@@ -55,6 +50,73 @@ class Zoom
 
         $responseBody = json_decode($response->getBody(), true);
         return $responseBody['access_token'];
+    }
+
+
+    /**
+     * retrieve engagement
+     * @param string $meetingId
+     * @return array
+     */
+    public function getEngagements()
+    {
+        $error_count = 0;
+        $getEngagementsAPI = function (string $next_page_token = null) use (&$error_count) {
+            try {
+                $response = $this->client->request('GET', "contact_center/engagements?page_size=100" . (($next_page_token === null) ? '' : '&next_page_token=' . $next_page_token));
+                $data = json_decode($response->getBody(), true);
+                return [
+                    'status' => true,
+                    'data' => $data,
+                ];
+            } catch (\Throwable $th) {
+                $error_count++;
+                return [
+                    'status' => false,
+                    'message' => $th->getMessage(),
+                ];
+            }
+        };
+        $next_page_token = null;
+        while (true) {
+            if ($error_count > 5) {
+                break;
+            }
+            $api_response = $getEngagementsAPI($next_page_token);
+            if ($api_response === false) {
+                $error_count++;
+                continue;
+            }
+            yield $api_response;
+            if ($api_response['status'] === true) {
+                $api_response_data = $api_response['data'];
+                $next_page_token = $api_response_data['next_page_token'];
+                if (($next_page_token ?? '') === '') {
+                    break;
+                }
+            }
+        }
+    }
+    /**
+     * retrieve engagement
+     * @param string $engagementId
+     * @return array
+     */
+    public function getEngagement(string $engagementId)
+    {
+        try {
+            $response = $this->client->request('GET', "contact_center/engagements/$engagementId");
+            $data = json_decode($response->getBody(), true);
+            return [
+                'status' => true,
+                'data' => $data,
+            ];
+        } catch (\Throwable $th) {
+            return [
+                'status' => false,
+                'message' => $th->getMessage(),
+            ];
+        }
     }
 
     // create meeting
@@ -170,7 +232,8 @@ class Zoom
 
             return [
                 'status' => true,
-                'data' => $previousMeetings]
+                'data' => $previousMeetings
+            ]
             ;
 
         } catch (\Throwable $th) {
