@@ -24,8 +24,6 @@ class Zoom {
 
         $this->accessToken = $this->getAccessToken();
 
-        echo $this->accessToken . "\n";
-
         $this->client = new Client( [
             'base_uri' => 'https://api.zoom.us/v2/',
             'headers'  => [
