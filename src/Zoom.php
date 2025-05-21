@@ -388,7 +388,7 @@ class Zoom {
 
     }
 
-    public function sendSMSMessage( string $senderUserId, string $senderPhoneNumber, string $message, array $attachments = [] ) {
+    public function sendSMSMessage( string $senderUserId, string $senderPhoneNumber, string $recipientPhoneNumber, string $message, array $attachments = [] ) {
 
         try {
             $response = $this->client->request( 'POST', 'phone/sms/send', [
@@ -396,6 +396,11 @@ class Zoom {
                     'sender'      => [
                         'user_id'      => $senderUserId,
                         'phone_number' => $senderPhoneNumber,
+                    ],
+                    'to_members'  => [
+                        [
+                            'phone_number' => $recipientPhoneNumber,
+                        ],
                     ],
                     'message'     => $message,
                     'attachments' => $attachments,
