@@ -391,7 +391,7 @@ class Zoom {
     public function sendSMSMessage( string $senderUserId, string $senderPhoneNumber, string $recipientPhoneNumber, string $message, array $attachments = [] ) {
 
         try {
-            $response = $this->client->request( 'POST', 'phone/sms/send', [
+            $response = $this->client->request( 'POST', 'phone/sms/messages', [
                 'json' => [
                     'sender'      => [
                         'user_id'      => $senderUserId,
