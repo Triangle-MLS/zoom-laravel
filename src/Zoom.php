@@ -16,14 +16,14 @@ class Zoom {
 
         if ( auth()->check() ) {
             $user                = auth()->user();
-            $this->client_id     = $this->client_id ?? method_exists( $user, 'zoomClientID' ) ? $user->clientID() : config( 'zoom.client_id' );
-            $this->client_secret = $this->client_secret ?? method_exists( $user, 'zoomClientSecret' ) ? $user->clientSecret() : config( 'zoom.client_secret' );
-            $this->account_id    = $this->account_id ?? method_exists( $user, 'zoomAccountID' ) ? $user->accountID() : config( 'zoom.account_id' );
+            $this->client_id ??= method_exists( $user, 'zoomClientID' ) ? $user->clientID() : config( 'zoom.client_id' );
+            $this->client_secret ??= method_exists( $user, 'zoomClientSecret' ) ? $user->clientSecret() : config( 'zoom.client_secret' );
+            $this->account_id ??= method_exists( $user, 'zoomAccountID' ) ? $user->accountID() : config( 'zoom.account_id' );
         }
         else {
-            $this->client_id     = $this->client_id ?? config( 'zoom.client_id' );
-            $this->client_secret = $this->client_secret ?? config( 'zoom.client_secret' );
-            $this->account_id    = $this->account_id ?? config( 'zoom.account_id' );
+            $this->client_id ??= config( 'zoom.client_id' );
+            $this->client_secret ??= config( 'zoom.client_secret' );
+            $this->account_id ??= config( 'zoom.account_id' );
         }
 
         $this->accessToken = $this->getAccessToken();
@@ -504,8 +504,6 @@ class Zoom {
     /**
      * List hsitorical engagement dataset data
      * https://developers.zoom.us/docs/api/contact-center/#tag/reports-v2cx-analytics/get/contact_center/analytics/dataset/historical/engagement
-     * @param string $from GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
-     * @param string $to GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
      */
     public function getContactCenterAnalyticsDatasetHistoricalEngagement() {
 
@@ -526,6 +524,51 @@ class Zoom {
                 $next_page_token = $responseData['next_page_token'] ?? null;
 
                 $data  = $responseData['engagements'];
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * List queues​
+     * https://developers.zoom.us/docs/api/contact-center/#tag/queues/get/contact_center/queues
+     */
+    public function getContactCenterQueues() {
+
+        $url = 'contact_center/queues';
+        // $parameters = [];
+        // if ( $channel !== null ) {
+        //     $parameters[] = "channel={$channel}";
+        // }
+        // if ( count( $parameters ) > 0 ) {
+        //     $url = $url . '?' . implode( '&', $parameters );
+        // }
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( $next_page_token !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                ];
+                if ( $next_page_token !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData['queues'];
                 $first = false;
             }
 
