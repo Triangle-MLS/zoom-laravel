@@ -3,6 +3,10 @@ namespace Jubaer\Zoom;
 
 use GuzzleHttp\Client;
 
+/**
+ * Summary of Zoom
+ * https://developers.zoom.us/docs/api
+ */
 class Zoom {
 
     protected string $accessToken;
@@ -12,14 +16,14 @@ class Zoom {
 
         if ( auth()->check() ) {
             $user                = auth()->user();
-            $this->client_id     = method_exists( $user, 'clientID' ) ? $user->clientID() : config( 'zoom.client_id' );
-            $this->client_secret = method_exists( $user, 'clientSecret' ) ? $user->clientSecret() : config( 'zoom.client_secret' );
-            $this->account_id    = method_exists( $user, 'accountID' ) ? $user->accountID() : config( 'zoom.account_id' );
+            $this->client_id     = $this->client_id ?? method_exists( $user, 'zoomClientID' ) ? $user->clientID() : config( 'zoom.client_id' );
+            $this->client_secret = $this->client_secret ?? method_exists( $user, 'zoomClientSecret' ) ? $user->clientSecret() : config( 'zoom.client_secret' );
+            $this->account_id    = $this->account_id ?? method_exists( $user, 'zoomAccountID' ) ? $user->accountID() : config( 'zoom.account_id' );
         }
         else {
-            $this->client_id     = config( 'zoom.client_id' );
-            $this->client_secret = config( 'zoom.client_secret' );
-            $this->account_id    = config( 'zoom.account_id' );
+            $this->client_id     = $this->client_id ?? config( 'zoom.client_id' );
+            $this->client_secret = $this->client_secret ?? config( 'zoom.client_secret' );
+            $this->account_id    = $this->account_id ?? config( 'zoom.account_id' );
         }
 
         $this->accessToken = $this->getAccessToken();
@@ -27,7 +31,7 @@ class Zoom {
         $this->client = new Client( [
             'base_uri' => 'https://api.zoom.us/v2/',
             'headers'  => [
-                'Authorization' => 'Bearer ' . $this->accessToken,
+                'Authorization' => "Bearer {$this->accessToken}",
                 'Content-Type'  => 'application/json',
             ],
         ] );
@@ -37,7 +41,7 @@ class Zoom {
 
         $client = new Client( [
             'headers' => [
-                'Authorization' => 'Basic ' . base64_encode( $this->client_id . ':' . $this->client_secret ),
+                'Authorization' => 'Basic ' . base64_encode( "{$this->client_id}:{$this->client_secret}" ),
                 'Host'          => 'zoom.us',
             ],
         ] );
@@ -54,9 +58,8 @@ class Zoom {
     }
 
     /**
-     * retrieve engagement
-     * @param string $meetingId
-     * @return array
+     * Return a list of engagements.
+     * https://developers.zoom.us/docs/api/contact-center/#tag/engagements/get/contact_center/engagements
      */
     public function getEngagements() {
 
@@ -385,7 +388,6 @@ class Zoom {
                 'message' => $th->getMessage(),
             ];
         }
-
     }
 
     public function sendSMSMessage( string $senderUserId, string $senderPhoneNumber, string $recipientPhoneNumber, string $message, array $attachments = [] ) {
@@ -417,6 +419,126 @@ class Zoom {
             ];
         }
 
+    }
+
+    /**
+     * List call queues
+     * https://developers.zoom.us/docs/api/phone/#tag/call-queues/get/phone/call_queues
+     */
+    public function getPhoneCallQueues() {
+
+        $url = 'phone/call_queues';
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( $next_page_token !== '' ) ) {
+                $query = [
+                    'page_size' => 100,
+                ];
+                if ( $next_page_token !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData['call_queues'];
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * List call queue analytics
+     * https://developers.zoom.us/docs/api/phone/#tag/call-queues/get/phone/call_queue_analytics
+     * @param string $from GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
+     * @param string $to GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
+     */
+    public function getPhoneCallQueueAnalytics( string $from, string $to ) {
+
+        $url = 'phone/call_queue_analytics';
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                    'from'      => $from,
+                    'to'        => $to,
+                ];
+                if ( $next_page_token !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData; //['call_queues']
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * List hsitorical engagement dataset data
+     * https://developers.zoom.us/docs/api/contact-center/#tag/reports-v2cx-analytics/get/contact_center/analytics/dataset/historical/engagement
+     * @param string $from GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
+     * @param string $to GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
+     */
+    public function getContactCenterAnalyticsDatasetHistoricalEngagement() {
+
+        $url = 'contact_center/analytics/dataset/historical/engagement';
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( $next_page_token !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                ];
+                if ( $next_page_token !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData['engagements'];
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
     }
 
 }
