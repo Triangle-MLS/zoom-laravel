@@ -422,6 +422,46 @@ class Zoom {
     }
 
     /**
+     * List hsitorical engagement dataset data
+     * https://developers.zoom.us/docs/api/contact-center/#tag/reports-v2cx-analytics/get/contact_center/analytics/dataset/historical/engagement
+     * @param string $from GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
+     * @param string $to GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
+     */
+    public function getContactCenterAnalyticsDatasetHistoricalEngagement() {
+
+        $url = 'contact_center/analytics/dataset/historical/engagement';
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                ];
+                if ( ( $next_page_token ?? '' ) !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData['engagements'];
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * List call queues
      * https://developers.zoom.us/docs/api/phone/#tag/call-queues/get/phone/call_queues
      */
@@ -431,11 +471,11 @@ class Zoom {
         try {
             $first           = true;
             $next_page_token = '';
-            while ( $first || ( $next_page_token !== '' ) ) {
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
                 $query = [
                     'page_size' => 100,
                 ];
-                if ( $next_page_token !== '' ) {
+                if ( ( $next_page_token ?? '' ) !== '' ) {
                     $query['next_page_token'] = $next_page_token;
                 }
                 $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
@@ -477,7 +517,7 @@ class Zoom {
                     'from'      => $from,
                     'to'        => $to,
                 ];
-                if ( $next_page_token !== '' ) {
+                if ( ( $next_page_token ?? '' ) !== '' ) {
                     $query['next_page_token'] = $next_page_token;
                 }
                 $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
@@ -486,44 +526,6 @@ class Zoom {
                 $next_page_token = $responseData['next_page_token'] ?? null;
 
                 $data  = $responseData; //['call_queues']
-                $first = false;
-            }
-
-            return [
-                'status' => true,
-                'data'   => $data,
-            ];
-        } catch ( \Throwable $th ) {
-            return [
-                'status'  => false,
-                'message' => $th->getMessage(),
-            ];
-        }
-    }
-
-    /**
-     * List hsitorical engagement dataset data
-     * https://developers.zoom.us/docs/api/contact-center/#tag/reports-v2cx-analytics/get/contact_center/analytics/dataset/historical/engagement
-     */
-    public function getContactCenterAnalyticsDatasetHistoricalEngagement() {
-
-        $url = 'contact_center/analytics/dataset/historical/engagement';
-        try {
-            $first           = true;
-            $next_page_token = '';
-            while ( $first || ( $next_page_token !== '' ) ) {
-                $query = [
-                    'page_size' => 300,
-                ];
-                if ( $next_page_token !== '' ) {
-                    $query['next_page_token'] = $next_page_token;
-                }
-                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
-                $responseData = json_decode( $response->getBody(), true );
-
-                $next_page_token = $responseData['next_page_token'] ?? null;
-
-                $data  = $responseData['engagements'];
                 $first = false;
             }
 
@@ -556,11 +558,11 @@ class Zoom {
         try {
             $first           = true;
             $next_page_token = '';
-            while ( $first || ( $next_page_token !== '' ) ) {
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
                 $query = [
                     'page_size' => 300,
                 ];
-                if ( $next_page_token !== '' ) {
+                if ( ( $next_page_token ?? '' ) !== '' ) {
                     $query['next_page_token'] = $next_page_token;
                 }
                 $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
@@ -569,6 +571,160 @@ class Zoom {
                 $next_page_token = $responseData['next_page_token'] ?? null;
 
                 $data  = $responseData['queues'];
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * List queue agents
+     * https://developers.zoom.us/docs/api/contact-center/#tag/queues/get/contact_center/queues/%7BqueueId%7D/agents
+     */
+    public function getContactCenterQueueAgents( string $queueId ) {
+
+        $url = "contact_center/queues/{$queueId}/agents";
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                ];
+                if ( ( $next_page_token ?? '' ) !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData['agents'];
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Get a queue's operating hours
+     * https://developers.zoom.us/docs/api/contact-center/#tag/queues/get/contact_center/queues/{queueId}/operating_hours
+     */
+    public function getContactCenterQueueOperatingHours( string $queueId ) {
+
+        $url = "contact_center/queues/{$queueId}/operating_hours";
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                ];
+                if ( ( $next_page_token ?? '' ) !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+                unset( $responseData['next_page_token'] );
+
+                $data  = $responseData;
+                $first = false;
+                break;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * List business hours
+     * https://developers.zoom.us/docs/api/contact-center/#tag/operating-hours/get/contact_center/business_hours
+     */
+    public function getContactCenterBusinessHoursList() {
+
+        $url = "contact_center/business_hours";
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                ];
+                if ( ( $next_page_token ?? '' ) !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData['business_hours'];
+                $first = false;
+            }
+
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * List closures
+     * https://developers.zoom.us/docs/api/contact-center/#tag/operating-hours/get/contact_center/closures
+     */
+    public function getContactCenterClosuresList() {
+
+        $url = "contact_center/closures";
+        try {
+            $first           = true;
+            $next_page_token = '';
+            while ( $first || ( ( $next_page_token ?? '' ) !== '' ) ) {
+                $query = [
+                    'page_size' => 300,
+                ];
+                if ( ( $next_page_token ?? '' ) !== '' ) {
+                    $query['next_page_token'] = $next_page_token;
+                }
+                $response     = $this->client->request( 'GET', $url, [ 'query' => $query ] );
+                $responseData = json_decode( $response->getBody(), true );
+
+                $next_page_token = $responseData['next_page_token'] ?? null;
+
+                $data  = $responseData['closure_sets'];
                 $first = false;
             }
 
