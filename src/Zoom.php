@@ -60,14 +60,57 @@ class Zoom {
     /**
      * Return a list of engagements.
      * https://developers.zoom.us/docs/api/contact-center/#tag/engagements/get/contact_center/engagements
+     *
+     * @param array $options Optional parameters:
+     *   - next_page_token (string): Token for pagination
+     *   - page_size (int): Number of items per page (default: 10, max: 100)
+     *   - timezone (string): The call's timezone (default: UTC)
+     *   - from (string): Start date (yyyy-mm-dd or yyyy-MM-dd'T'HH:mm:ss'Z')
+     *   - to (string): End date (yyyy-mm-dd or yyyy-MM-dd'T'HH:mm:ss'Z')
+     *   - queue_id (string): The queue's ID
+     *   - user_id (string): The agent's ID
+     *   - consumer_number (string): The customer's phone number
+     *   - channel_sources (array): Channel sources
+     *   - direction (string): Engagement direction (inbound|outbound)
      */
-    public function getEngagements() {
+    public function getEngagements( array $options = [] ) {
 
         $error_count       = 0;
-        $getEngagementsAPI = function (string $next_page_token = null) use (&$error_count) {
+        $getEngagementsAPI = function (string $next_page_token = null) use (&$error_count, $options) {
             try {
-                $next_page_token_query = ( $next_page_token === null ) ? '' : "&next_page_token={$next_page_token}";
-                $response = $this->client->request( 'GET', "contact_center/engagements?page_size=100{$next_page_token_query}" );
+                // Build query parameters
+                $queryParams = [];
+
+                // Set default page_size if not provided
+                $queryParams['page_size'] = $options['page_size'] ?? 100;
+
+                // Add pagination token
+                if ( $next_page_token !== null ) {
+                    $queryParams['next_page_token'] = $next_page_token;
+                }
+
+                // Add optional parameters if provided
+                $allowedParams = [
+                    'timezone', 'from', 'to', 'queue_id', 'user_id',
+                    'consumer_number', 'direction'
+                ];
+
+                foreach ( $allowedParams as $param ) {
+                    if ( isset( $options[$param] ) && $options[$param] !== '' ) {
+                        $queryParams[$param] = $options[$param];
+                    }
+                }
+
+                // Handle channel_sources array parameter
+                if ( isset( $options['channel_sources'] ) && is_array( $options['channel_sources'] ) ) {
+                    foreach ( $options['channel_sources'] as $channelSource ) {
+                        $queryParams['channel_sources'][] = $channelSource;
+                    }
+                }
+
+                $response = $this->client->request( 'GET', 'contact_center/engagements', [
+                    'query' => $queryParams
+                ] );
                 $data = json_decode( $response->getBody(), true );
                 return [
                     'status' => true,
@@ -81,7 +124,7 @@ class Zoom {
                 ];
             }
         };
-        $next_page_token   = null;
+        $next_page_token   = $options['next_page_token'] ?? null;
         while ( true ) {
             if ( $error_count > 5 ) {
                 break;
