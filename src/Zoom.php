@@ -66,7 +66,8 @@ class Zoom {
         $error_count       = 0;
         $getEngagementsAPI = function (string $next_page_token = null) use (&$error_count) {
             try {
-                $response = $this->client->request( 'GET', "contact_center/engagements?page_size=100" . ( ( $next_page_token === null ) ? '' : '&next_page_token=' . $next_page_token ) );
+                $next_page_token_query = ( $next_page_token === null ) ? '' : "&next_page_token={$next_page_token}";
+                $response = $this->client->request( 'GET', "contact_center/engagements?page_size=100{$next_page_token_query}" );
                 $data = json_decode( $response->getBody(), true );
                 return [
                     'status' => true,
@@ -109,7 +110,30 @@ class Zoom {
     public function getEngagement( string $engagementId ) {
 
         try {
-            $response = $this->client->request( 'GET', "contact_center/engagements/$engagementId" );
+            $response = $this->client->request( 'GET', "contact_center/engagements/{$engagementId}" );
+            $data     = json_decode( $response->getBody(), true );
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Get an engagement's survey
+     * https://developers.zoom.us/docs/api/rest/reference/contact-center/methods/#operation/getEngagementSurvey
+     * @param string $engagementId The engagement's ID
+     * @return array
+     */
+    public function getEngagementSurvey( string $engagementId ) {
+
+        try {
+            $response = $this->client->request( 'GET', "contact_center/engagements/{$engagementId}/survey" );
             $data     = json_decode( $response->getBody(), true );
             return [
                 'status' => true,
