@@ -489,6 +489,85 @@ class Zoom {
     }
 
     /**
+     * Get QM interaction for an engagement.
+     * https://developers.zoom.us/docs/api/quality-management/
+     * Requires scopes: zoom_quality_management:read:interactions:admin
+     *
+     * @param string $engagementId The engagement ID to look up QM data for
+     * @return array
+     */
+    public function getQMInteraction( string $engagementId ) {
+
+        try {
+            $response = $this->client->request( 'GET', 'qm/interactions', [
+                'query' => [
+                    'engagement_id' => $engagementId,
+                    'page_size'     => 1,
+                ],
+            ] );
+            $data = json_decode( $response->getBody(), true );
+
+            $interactions = $data['interactions'] ?? [];
+            if ( empty( $interactions ) ) {
+                return [
+                    'status'  => false,
+                    'message' => 'No QM interaction found for engagement.',
+                ];
+            }
+
+            $interactionId = $interactions[0]['interaction_id'] ?? null;
+            if ( $interactionId ) {
+                $detailResponse = $this->client->request( 'GET', "qm/interactions/{$interactionId}" );
+                $detailData     = json_decode( $detailResponse->getBody(), true );
+                return [
+                    'status' => true,
+                    'data'   => $detailData,
+                ];
+            }
+
+            return [
+                'status' => true,
+                'data'   => $interactions[0],
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Get QM automated evaluations for an interaction.
+     * https://developers.zoom.us/docs/api/quality-management/
+     * Requires scopes: zoom_quality_management:read:evaluations:admin
+     *
+     * @param string $interactionId The QM interaction ID
+     * @return array
+     */
+    public function getQMAutomatedEvaluations( string $interactionId ) {
+
+        try {
+            $response = $this->client->request( 'GET', 'qm/automated_evaluations', [
+                'query' => [
+                    'interaction_id' => $interactionId,
+                    'page_size'      => 10,
+                ],
+            ] );
+            $data = json_decode( $response->getBody(), true );
+            return [
+                'status' => true,
+                'data'   => $data,
+            ];
+        } catch ( \Throwable $th ) {
+            return [
+                'status'  => false,
+                'message' => $th->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * List hsitorical engagement dataset data
      * https://developers.zoom.us/docs/api/contact-center/#tag/reports-v2cx-analytics/get/contact_center/analytics/dataset/historical/engagement
      * @param string $from GMT yyyy-MM-dd'T'HH:mm:ss'Z' (earliest data avilable is from 2 years ago)
