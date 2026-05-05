@@ -515,7 +515,12 @@ class Zoom {
                 ];
             }
 
-            $interactionId = $interactions[0]['interaction_id'] ?? null;
+            // The QM list endpoint nests interaction_id under interaction_info,
+            // while older API revisions returned it at the top level. Check both
+            // so the detail fetch works against either shape.
+            $interactionId = $interactions[0]['interaction_info']['interaction_id']
+                ?? $interactions[0]['interaction_id']
+                ?? null;
             if ( $interactionId ) {
                 $detailResponse = $this->client->request( 'GET', "qm/interactions/{$interactionId}" );
                 $detailData     = json_decode( $detailResponse->getBody(), true );
