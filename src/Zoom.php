@@ -58,6 +58,27 @@ class Zoom {
     }
 
     /**
+     * Refresh the OAuth access token mid-session. Zoom tokens are ~1 hour TTL,
+     * so a long-running bulk job (>1h) will start receiving 401s once the
+     * initial token expires. requestWithBackoff() calls this on a 401 and
+     * retries the failed request with the new token.
+     *
+     * Rebuilds the underlying Guzzle client with the new Authorization header
+     * — the existing client has the token baked into its default headers.
+     */
+    protected function refreshAccessToken(): void {
+
+        $this->accessToken = $this->getAccessToken();
+        $this->client      = new Client( [
+            'base_uri' => 'https://api.zoom.us/v2/',
+            'headers'  => [
+                'Authorization' => "Bearer {$this->accessToken}",
+                'Content-Type'  => 'application/json',
+            ],
+        ] );
+    }
+
+    /**
      * Return a list of engagements.
      * https://developers.zoom.us/docs/api/contact-center/#tag/engagements/get/contact_center/engagements
      *
@@ -508,8 +529,9 @@ class Zoom {
      */
     protected function requestWithBackoff( string $method, string $path, array $options = [], int $maxAttempts = 4 ) {
 
-        $attempt   = 0;
-        $lastError = null;
+        $attempt        = 0;
+        $tokenRefreshed = false;
+        $lastError      = null;
 
         while ( $attempt < $maxAttempts ) {
             $attempt++;
@@ -517,7 +539,24 @@ class Zoom {
                 $response = $this->client->request( $method, $path, $options + [ 'http_errors' => true ] );
                 return $response;
             } catch ( \GuzzleHttp\Exception\BadResponseException $e ) {
-                $status   = $e->getResponse() ? $e->getResponse()->getStatusCode() : 0;
+                $status = $e->getResponse() ? $e->getResponse()->getStatusCode() : 0;
+
+                // 401 = expired access token. Zoom OAuth tokens are ~1 hour TTL;
+                // long-running bulk jobs blow past that. Refresh once and retry
+                // the same request. If the refresh itself fails or a second 401
+                // comes back, fall through to the normal failure path.
+                if ( $status === 401 && ! $tokenRefreshed ) {
+                    try {
+                        $this->refreshAccessToken();
+                        $tokenRefreshed = true;
+                        $attempt--; // don't count the token-refresh retry against attempt budget
+                        continue;
+                    } catch ( \Throwable $refreshError ) {
+                        // Refresh failed — give up on this request, surface the original 401
+                        throw $e;
+                    }
+                }
+
                 $isRetryable = $status === 429 || ( $status >= 500 && $status <= 599 );
 
                 if ( ! $isRetryable || $attempt >= $maxAttempts ) {
