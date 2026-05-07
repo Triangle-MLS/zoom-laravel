@@ -489,9 +489,81 @@ class Zoom {
     }
 
     /**
+     * Issue a Guzzle request with retry-with-backoff for transient failures.
+     *
+     * Retries on:
+     *   - HTTP 429 (rate limited) — honors Retry-After header when present
+     *   - HTTP 5xx (server error) — exponential backoff
+     *   - Connection-level exceptions (timeout, socket reset, etc.)
+     *
+     * Does NOT retry on 4xx other than 429 (those are caller errors). Caller
+     * errors get rethrown so callers can distinguish them via the catch path.
+     *
+     * @param  string $method   HTTP method
+     * @param  string $path     Path relative to the client's base_uri
+     * @param  array  $options  Guzzle options (query, json, headers, etc.)
+     * @param  int    $maxAttempts  Total attempts before giving up (default 4)
+     * @return \Psr\Http\Message\ResponseInterface
+     * @throws \GuzzleHttp\Exception\GuzzleException When all retries exhausted
+     */
+    protected function requestWithBackoff( string $method, string $path, array $options = [], int $maxAttempts = 4 ) {
+
+        $attempt   = 0;
+        $lastError = null;
+
+        while ( $attempt < $maxAttempts ) {
+            $attempt++;
+            try {
+                $response = $this->client->request( $method, $path, $options + [ 'http_errors' => true ] );
+                return $response;
+            } catch ( \GuzzleHttp\Exception\BadResponseException $e ) {
+                $status   = $e->getResponse() ? $e->getResponse()->getStatusCode() : 0;
+                $isRetryable = $status === 429 || ( $status >= 500 && $status <= 599 );
+
+                if ( ! $isRetryable || $attempt >= $maxAttempts ) {
+                    // Either a non-retryable 4xx or we've used all attempts.
+                    throw $e;
+                }
+
+                // Honor Retry-After when 429; otherwise exponential backoff
+                // starting at 1s and doubling each attempt (1, 2, 4, 8).
+                $sleepMs = 0;
+                if ( $status === 429 && $e->getResponse()->hasHeader( 'Retry-After' ) ) {
+                    $retryAfter = $e->getResponse()->getHeader( 'Retry-After' )[0];
+                    $sleepMs = is_numeric( $retryAfter )
+                        ? ( (int) $retryAfter ) * 1000
+                        : max( 1000, (int) ( ( strtotime( $retryAfter ) - time() ) * 1000 ) );
+                }
+                if ( $sleepMs <= 0 ) {
+                    $sleepMs = ( 2 ** ( $attempt - 1 ) ) * 1000; // 1s, 2s, 4s, 8s
+                }
+                usleep( $sleepMs * 1000 );
+                $lastError = $e;
+            } catch ( \GuzzleHttp\Exception\ConnectException $e ) {
+                // Connection-level (DNS, refused, timeout, SSL) — also retryable.
+                if ( $attempt >= $maxAttempts ) {
+                    throw $e;
+                }
+                usleep( ( 2 ** ( $attempt - 1 ) ) * 1_000_000 );
+                $lastError = $e;
+            }
+        }
+
+        // Should be unreachable — every code path either returns or throws.
+        throw $lastError ?? new \RuntimeException( 'requestWithBackoff: exhausted retries' );
+    }
+
+    /**
      * Get QM interaction for an engagement.
      * https://developers.zoom.us/docs/api/quality-management/
      * Requires scopes: zoom_quality_management:read:interactions:admin
+     *
+     * Returns one of three shapes — callers MUST distinguish them, because
+     * "no data" and "transient failure" need different downstream handling
+     * (e.g., stamp synced_at on no-data; preserve for retry on transient):
+     *   1. status=true  + data    → QM payload
+     *   2. status=false + reason='no_data'  + message → Zoom returned 200 with empty interactions
+     *   3. status=false + reason='api_error'+ message + http_status → request retries exhausted
      *
      * @param string $engagementId The engagement ID to look up QM data for
      * @return array
@@ -499,7 +571,7 @@ class Zoom {
     public function getQMInteraction( string $engagementId ) {
 
         try {
-            $response = $this->client->request( 'GET', 'qm/interactions', [
+            $response = $this->requestWithBackoff( 'GET', 'qm/interactions', [
                 'query' => [
                     'engagement_id' => $engagementId,
                     'page_size'     => 1,
@@ -511,6 +583,7 @@ class Zoom {
             if ( empty( $interactions ) ) {
                 return [
                     'status'  => false,
+                    'reason'  => 'no_data',
                     'message' => 'No QM interaction found for engagement.',
                 ];
             }
@@ -522,7 +595,7 @@ class Zoom {
                 ?? $interactions[0]['interaction_id']
                 ?? null;
             if ( $interactionId ) {
-                $detailResponse = $this->client->request( 'GET', "qm/interactions/{$interactionId}" );
+                $detailResponse = $this->requestWithBackoff( 'GET', "qm/interactions/{$interactionId}" );
                 $detailData     = json_decode( $detailResponse->getBody(), true );
                 return [
                     'status' => true,
@@ -534,9 +607,17 @@ class Zoom {
                 'status' => true,
                 'data'   => $interactions[0],
             ];
+        } catch ( \GuzzleHttp\Exception\BadResponseException $e ) {
+            return [
+                'status'      => false,
+                'reason'      => 'api_error',
+                'http_status' => $e->getResponse() ? $e->getResponse()->getStatusCode() : 0,
+                'message'     => $e->getMessage(),
+            ];
         } catch ( \Throwable $th ) {
             return [
                 'status'  => false,
+                'reason'  => 'api_error',
                 'message' => $th->getMessage(),
             ];
         }
@@ -547,13 +628,15 @@ class Zoom {
      * https://developers.zoom.us/docs/api/quality-management/
      * Requires scopes: zoom_quality_management:read:evaluations:admin
      *
+     * Same status/reason contract as getQMInteraction.
+     *
      * @param string $interactionId The QM interaction ID
      * @return array
      */
     public function getQMAutomatedEvaluations( string $interactionId ) {
 
         try {
-            $response = $this->client->request( 'GET', 'qm/automated_evaluations', [
+            $response = $this->requestWithBackoff( 'GET', 'qm/automated_evaluations', [
                 'query' => [
                     'interaction_id' => $interactionId,
                     'page_size'      => 10,
@@ -564,9 +647,17 @@ class Zoom {
                 'status' => true,
                 'data'   => $data,
             ];
+        } catch ( \GuzzleHttp\Exception\BadResponseException $e ) {
+            return [
+                'status'      => false,
+                'reason'      => 'api_error',
+                'http_status' => $e->getResponse() ? $e->getResponse()->getStatusCode() : 0,
+                'message'     => $e->getMessage(),
+            ];
         } catch ( \Throwable $th ) {
             return [
                 'status'  => false,
+                'reason'  => 'api_error',
                 'message' => $th->getMessage(),
             ];
         }
